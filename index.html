@@ -84,6 +84,8 @@
         
             <li><a href="#how-to-contribute">How to contribute</a></li>
         
+            <li><a href="#how-to-extend-nanpy">How to extend Nanpy</a></li>
+        
             <li><a href="#license">License</a></li>
         
     
@@ -138,6 +140,109 @@ To build and install Nanpy firmware, copy Nanpy directory under your "sketchbook
 <h2 id="how-to-contribute">How to contribute</h2>
 <p>Nanpy still needs a lot of work. You can contribute with patches (bugfixing, improvements, adding support for a new library not included in Nanpy yet, writing examples and so on), writing documentation, reporting bugs, creating packages or simply spreading Nanpy through the web if you like it :) If you have any doubt or problem, please contact me at <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#115;&#116;&#97;&#103;&#105;&#46;&#97;&#110;&#100;&#114;&#101;&#97;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#115;&#116;&#97;&#103;&#105;&#46;&#97;&#110;&#100;&#114;&#101;&#97;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
 <p>Do you want to support us with a coffee? We need a lot of caffeine to code all night long! if you like this project and you want to support us, <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&amp;hosted_button_id=TDTPP5JHVJK8J">please donate using Paypal</a></p>
+<hr />
+<h2 id="how-to-extend-nanpy">How to extend Nanpy</h2>
+<p>First of all create some boilerplate code starting with Python. Suppose you want initially support two methods of the Centpiede library</p>
+<pre class="prettyprint well"><code>void portWrite(int port, int value);
+int portRead(int port);
+</code></pre>
+<p>You can create your centipede.py module and put it in nanpy/</p>
+<pre class="prettyprint well"><code>from nanpy.arduinoboard import ArduinoObject
+from nanpy.arduinoboard import (arduinoobjectmethod, returns)
+
+class Centipede(ArduinoObject):
+
+    def __init__(self, your_parameters connection=None):
+        ArduinoObject.__init__(self, connection=connection)
+        self.id = self.call('new', your_parameters)
+
+    @arduinoobjectmethod
+    def portWrite(self, port, value):
+        pass
+
+    @returns(int)
+    @arduinoobjectmethod
+    def portRead(self, port):
+        pass
+</code></pre>
+<p>After that you can include this module in the <strong>init</strong>.py to make it available in Nanpy (nanpy/<strong>init</strong>.py https://github.com/nanpy/nanpy/blob/master/nanpy/<strong>init</strong>.py)</p>
+<pre class="prettyprint well"><code>from nanpy.centipede import Centipede
+</code></pre>
+<p>You're done with Python :) Let's see how to add the firmware part (https://github.com/nanpy/nanpy-firmware)</p>
+<p>First of all modify sample.cfg adding</p>
+<pre class="prettyprint well"><code>#define USE_Centipede                                   1
+</code></pre>
+<p>or do it directly on your cfg.h file :)</p>
+<p>You need to create CentipedeClass.h and CentipedeClass.cpp</p>
+<p>In CentipedeClass.h you need</p>
+<pre class="prettyprint well"><code>#ifndef CENTIPEDE_CLASS
+#define CENTIPEDE_CLASS
+
+#include "BaseClass.h"
+#include "MethodDescriptor.h"
+
+class Centipede;
+
+namespace nanpy {
+    class CentipedeClass: public ObjectsManager&lt;Centipede&gt; {
+        public:
+            void elaborate( nanpy::MethodDescriptor* m );
+            const char* get_firmware_id();
+    };
+}
+
+#endif
+</code></pre>
+<p>And in Centipede.cpp</p>
+<pre class="prettyprint well"><code>#include "cfg.h"
+
+#if USE_Centipede
+
+#include &lt;Arduino.h&gt;
+#include &lt;Centipede.h&gt; //!!!Your real Centipede Library!!!!
+#include "CentipedeClass.h"
+#include &lt;stdlib.h&gt;
+
+const char* nanpy::CentipedeClass::get_firmware_id()
+{
+    return "Centipede";
+}
+
+void nanpy::CentipedeClass::elaborate( MethodDescriptor* m ) {
+    ObjectsManager&lt;Centipede&gt;::elaborate(m);
+
+    if (strcmp(m-&gt;getName(),"new") == 0) {
+        Centipede* cent;
+        cent = new Centipede (m-&gt;getInt(0), m-&gt;getInt(1), m-&gt;getInt(2));
+        cent-&gt;begin();
+        v.insert(cent);
+        m-&gt;returns(v.getLastIndex());
+    }
+
+    if (strcmp(m-&gt;getName(), "portWrite") == 0) {
+        m-&gt;returns(v[m-&gt;getObjectId()]-&gt;portWrite(m-&gt;getInt(0), m-&gt;getInt(1)));
+    }
+
+    if (strcmp(m-&gt;getName(), "portRead") == 0) {
+        m-&gt;returns(v[m-&gt;getObjectId()]-&gt;portRead(m-&gt;getInt(0)));
+    }
+};
+
+#endif
+</code></pre>
+<p>Finally you need to register your class in the main loop! Open Nanpy.ino file and add</p>
+<pre class="prettyprint well"><code>//...
+
+#if USE_Centipede
+#include &lt;Centipede.h&gt;
+#endif
+
+#include "CentipedeClass.h"
+
+//...
+
+REGISTER_CLASS_CONDITIONAL(CentipedeClass, USE_Centipede);
+</code></pre>
 <hr />
 <h2 id="license">License</h2>
 <p>This software is released under MIT License. Copyright (c) 2012-2014 Andrea Stagi <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#115;&#116;&#97;&#103;&#105;&#46;&#97;&#110;&#100;&#114;&#101;&#97;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;">&#115;&#116;&#97;&#103;&#105;&#46;&#97;&#110;&#100;&#114;&#101;&#97;&#64;&#103;&#109;&#97;&#105;&#108;&#46;&#99;&#111;&#109;</a></p>
